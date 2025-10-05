@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aimware for google
 // @namespace   http://tampermonkey.net/
-// @version       3.0
+// @version       4.0
 // @description   Aimware更新了谷歌小恐龙？
 // @author       Jeyor1337
 // @license       MIT
@@ -12,328 +12,377 @@
 (function() {
     'use strict';
     
-    // GUI CSS
-    const style = document.createElement('style');
-    style.textContent = `
-        .aimware-gui {
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            position: fixed;
-            bottom: 60px;
-            left: 20px;
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 4px;
-            padding: 10px;
-            min-width: 200px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            z-index: 10000;
-            display: none;
-        }
-        
-        .aimware-header {
-            background: #2a2a2a;
-            color: #fff;
-            padding: 8px;
-            margin: -10px -10px 10px -10px;
-            border-radius: 4px 4px 0 0;
-            font-weight: bold;
-            font-size: 12px;
-            text-align: center;
-            border-bottom: 1px solid #333;
-        }
-        
-        .aimware-control {
-            margin: 8px 0;
-        }
-        
-        .aimware-label {
-            color: #ccc;
-            font-size: 11px;
-            margin-bottom: 4px;
-            display: block;
-        }
-        
-        .aimware-toggle {
-            position: relative;
-            display: inline-block;
-            width: 40px;
-            height: 20px;
-        }
-        
-        .aimware-toggle input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        
-        .aimware-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #333;
-            transition: .4s;
-            border-radius: 20px;
-        }
-        
-        .aimware-slider:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 2px;
-            bottom: 2px;
-            background-color: #666;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        
-        input:checked + .aimware-slider {
-            background-color: #4CAF50;
-        }
-        
-        input:checked + .aimware-slider:before {
-            transform: translateX(20px);
-            background-color: #fff;
-        }
-        
-        .aimware-slider-value {
-            color: #4CAF50;
-            font-size: 11px;
-            margin-left: 10px;
-        }
-        
-        .aimware-button {
-            background: #d32f2f;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 11px;
-            width: 100%;
-            margin-top: 5px;
-        }
-        
-        .aimware-button:hover {
-            background: #f44336;
-        }
-        
-        .toggle-icon {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            width: 40px;
-            height: 40px;
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 4px;
-            cursor: pointer;
-            z-index: 10001;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #4CAF50;
-            font-size: 20px;
-            font-weight: bold;
-        }
-        
-        .toggle-icon:hover {
-            background: #2a2a2a;
-        }
-        
-        input[type="range"] {
-            width: 100%;
-            height: 4px;
-            background: #333;
-            outline: none;
-            border-radius: 2px;
-        }
-        
-        input[type="range"]::-webkit-slider-thumb {
-            appearance: none;
-            width: 12px;
-            height: 12px;
-            background: #4CAF50;
-            cursor: pointer;
-            border-radius: 50%;
-        }
-    `;
-    document.head.appendChild(style);
+    let isMenuOpen = false;
+    let originalGameOver = null;
+    let gameInstance = null;
     
-    // 创建GUI
-    const gui = document.createElement('div');
-    gui.className = 'aimware-gui';
-    gui.innerHTML = `
-        <div class="aimware-header">Aimware Menu</div>
-        <div class="aimware-control">
-            <span class="aimware-label">无敌模式</span>
-            <label class="aimware-toggle">
-                <input type="checkbox" id="godModeToggle">
-                <span class="aimware-slider"></span>
-            </label>
-            <span class="aimware-slider-value" id="godModeStatus">关闭</span>
-        </div>
-        <div class="aimware-control">
-            <span class="aimware-label">加速倍数: <span id="speedValue">1</span>x</span>
-            <input type="range" id="speedSlider" min="1" max="20" value="1">
-        </div>
-        <button class="aimware-button" id="endGameBtn">结束游戏</button>
-    `;
-    
-    // 创建图标
-    const toggleIcon = document.createElement('div');
-    toggleIcon.className = 'toggle-icon';
-    toggleIcon.textContent = 'G';
-    toggleIcon.title = 'CLICKGUI';
-    
-    document.body.appendChild(gui);
-    document.body.appendChild(toggleIcon);
-    
-    // 模块状态
-    let gameState = {
-        godMode: false,
-        speedMultiplier: 1,
-        originalGameOver: null,
-        originalSpeed: 1
-    };
-    
-    // 等待游戏加载
-    let gameCheckInterval = setInterval(() => {
+    let checkInterval = setInterval(() => {
         if (window.Runner && window.Runner.instance_) {
-            clearInterval(gameCheckInterval);
-            initializeGameMod();
+            clearInterval(checkInterval);
+            initializeMod();
         }
     }, 1000);
     
-    function initializeGameMod() {
-        const gameInstance = Runner.instance_;
+    function initializeMod() {
+        gameInstance = Runner.instance_;
+        originalGameOver = gameInstance.gameOver;
         
-        gameState.originalGameOver = gameInstance.gameOver;
-        gameState.originalSpeed = gameInstance.currentSpeed;
-        
-        updateGodMode();
-        updateGameSpeed();
-        
-        console.log("GUI已加载");
+        createMenuButton();
+        createAimwareGUI();
     }
     
-    function updateGodMode() {
-        const gameInstance = Runner.instance_;
-        if (!gameInstance) return;
+    function createMenuButton() {
+        const menuBtn = document.createElement('div');
+        menuBtn.innerHTML = '≡';
+        menuBtn.style.position = 'fixed';
+        menuBtn.style.bottom = '20px';
+        menuBtn.style.left = '20px';
+        menuBtn.style.zIndex = '10000';
+        menuBtn.style.width = '32px';
+        menuBtn.style.height = '32px';
+        menuBtn.style.backgroundColor = 'rgba(25, 25, 25, 0.9)';
+        menuBtn.style.color = '#ffffff';
+        menuBtn.style.borderRadius = '4px';
+        menuBtn.style.display = 'flex';
+        menuBtn.style.alignItems = 'center';
+        menuBtn.style.justifyContent = 'center';
+        menuBtn.style.cursor = 'pointer';
+        menuBtn.style.fontWeight = 'bold';
+        menuBtn.style.fontSize = '16px';
+        menuBtn.style.boxShadow = '0 2px 12px rgba(0,0,0,0.3)';
+        menuBtn.style.transition = 'all 0.2s ease';
+        menuBtn.style.border = '1px solid rgba(255,255,255,0.1)';
         
-        if (gameState.godMode) {
-            // 启用无敌
-            gameInstance.gameOver = function() {
-                console.log("无敌模式启用");
-            };
-            document.getElementById('godModeStatus').textContent = '开启';
-            document.getElementById('godModeStatus').style.color = '#4CAF50';
-        } else {
-            // 禁用无敌
-            if (gameState.originalGameOver) {
-                gameInstance.gameOver = gameState.originalGameOver;
+        menuBtn.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(35, 35, 35, 0.95)';
+        });
+        
+        menuBtn.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = 'rgba(25, 25, 25, 0.9)';
+        });
+        
+        menuBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleMenu();
+        });
+        
+        document.body.appendChild(menuBtn);
+    }
+    
+    function createAimwareGUI() {
+        const gui = document.createElement('div');
+        gui.id = 'aimware-gui';
+        gui.style.position = 'fixed';
+        gui.style.bottom = '60px';
+        gui.style.left = '20px';
+        gui.style.zIndex = '9999';
+        gui.style.width = '280px';
+        gui.style.backgroundColor = 'rgba(20, 20, 20, 0.95)';
+        gui.style.borderRadius = '6px';
+        gui.style.boxShadow = '0 8px 32px rgba(0,0,0,0.4)';
+        gui.style.display = 'none';
+        gui.style.overflow = 'hidden';
+        gui.style.fontFamily = 'Segoe UI, Arial, sans-serif';
+        gui.style.backdropFilter = 'blur(10px)';
+        gui.style.border = '1px solid rgba(255,255,255,0.08)';
+        
+        const titleBar = document.createElement('div');
+        titleBar.style.backgroundColor = 'rgba(15, 15, 15, 0.98)';
+        titleBar.style.padding = '14px 16px';
+        titleBar.style.color = '#e0e0e0';
+        titleBar.style.fontWeight = '600';
+        titleBar.style.fontSize = '13px';
+        titleBar.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
+        titleBar.style.letterSpacing = '0.5px';
+        titleBar.textContent = 'DinoWare';
+        gui.appendChild(titleBar);
+        
+        const content = document.createElement('div');
+        content.style.padding = '16px';
+        
+        const godModeContainer = createToggleSwitch('God Mode', false, (checked) => {
+            if (checked) {
+                gameInstance.gameOver = function() {};
+            } else {
+                gameInstance.gameOver = originalGameOver;
             }
-            document.getElementById('godModeStatus').textContent = '关闭';
-            document.getElementById('godModeStatus').style.color = '#ccc';
-        }
-    }
-    
-    function updateGameSpeed() {
-        const gameInstance = Runner.instance_;
-        if (!gameInstance) return;
+        });
+        content.appendChild(godModeContainer);
         
-        gameInstance.currentSpeed = gameState.originalSpeed * gameState.speedMultiplier;
-        
-        if (gameInstance.config) {
-            const multiplier = gameState.speedMultiplier;
-            gameInstance.config.SPEED = (gameInstance.config.originalSpeed || 6) * multiplier;
-            gameInstance.config.ACCELERATION = 0.001 * multiplier;
-            gameInstance.config.MAX_SPEED = (gameInstance.config.originalMaxSpeed || 13) * multiplier;
-            if (gameInstance.config.BG_CLOUD_SPEED) {
-                gameInstance.config.BG_CLOUD_SPEED = 0.2 * multiplier;
+        const speedContainer = createSlider('Speed Multiplier', 1, 1, 20, (value) => {
+            if (gameInstance) {
+                gameInstance.currentSpeed = value;
+                if (gameInstance.config) {
+                    gameInstance.config.SPEED = value;
+                    gameInstance.config.ACCELERATION = value;
+                    gameInstance.config.MAX_SPEED = value;
+                    gameInstance.config.BG_CLOUD_SPEED = value;
+                }
             }
-        }
+        });
+        content.appendChild(speedContainer);
         
-        document.getElementById('speedValue').textContent = gameState.speedMultiplier;
-    }
-    
-    // GUI事件处理
-    toggleIcon.addEventListener('click', function() {
-        gui.style.display = gui.style.display === 'none' ? 'block' : 'none';
-    });
-    
-    document.getElementById('godModeToggle').addEventListener('change', function(e) {
-        gameState.godMode = e.target.checked;
-        updateGodMode();
-    });
-    
-    document.getElementById('speedSlider').addEventListener('input', function(e) {
-        gameState.speedMultiplier = parseInt(e.target.value);
-        updateGameSpeed();
-    });
-    
-    document.getElementById('endGameBtn').addEventListener('click', function() {
-        const gameInstance = Runner.instance_;
-        if (gameInstance && gameState.originalGameOver) {
-            // 使用原版gameOver函数显示游戏结束界面
-            gameState.originalGameOver.call(gameInstance);
-            // 关闭GUI
-            gui.style.display = 'none';
-        }
-    });
-    
-    // 点击页面其他区域关闭GUI
-    document.addEventListener('click', function(e) {
-        if (!gui.contains(e.target) && !toggleIcon.contains(e.target)) {
-            gui.style.display = 'none';
-        }
-    });
-})();
+        const scoreContainer = createScoreInput();
+        content.appendChild(scoreContainer);
         
-        // 10倍加速
-        if (gameInstance.currentSpeed) {
-            gameInstance.currentSpeed *= 10;
-        }
+        const endGameBtn = document.createElement('button');
+        endGameBtn.textContent = 'End Game';
+        endGameBtn.style.width = '100%';
+        endGameBtn.style.padding = '12px';
+        endGameBtn.style.marginTop = '16px';
+        endGameBtn.style.backgroundColor = 'rgba(211, 47, 47, 0.9)';
+        endGameBtn.style.color = 'white';
+        endGameBtn.style.border = 'none';
+        endGameBtn.style.borderRadius = '4px';
+        endGameBtn.style.cursor = 'pointer';
+        endGameBtn.style.fontWeight = '600';
+        endGameBtn.style.fontSize = '13px';
+        endGameBtn.style.transition = 'all 0.2s ease';
+        endGameBtn.style.letterSpacing = '0.5px';
         
-        if (gameInstance.config) {
-            if (gameInstance.config.SPEED) gameInstance.config.SPEED *= 10;
-            if (gameInstance.config.ACCELERATION) gameInstance.config.ACCELERATION *= 10;
-            if (gameInstance.config.MAX_SPEED) gameInstance.config.MAX_SPEED *= 10;
-            if (gameInstance.config.BG_CLOUD_SPEED) gameInstance.config.BG_CLOUD_SPEED *= 10;
-        }
+        endGameBtn.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(183, 28, 28, 0.95)';
+        });
         
-        // 手动结束游戏（调用原版gameOver）
-        addGameOverButton(gameInstance);
+        endGameBtn.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = 'rgba(211, 47, 47, 0.9)';
+        });
         
-        console.log("AimWare：免疫碰撞、10倍加速");
-    }
-    
-    function addGameOverButton(gameInstance) {
-        const button = document.createElement('button');
-        button.innerHTML = '结束游戏';
-        button.style.position = 'fixed';
-        button.style.bottom = '20px';
-        button.style.left = '20px';
-        button.style.zIndex = '9999';
-        button.style.padding = '10px 15px';
-        button.style.backgroundColor = '#ff4444';
-        button.style.color = 'white';
-        button.style.border = 'none';
-        button.style.borderRadius = '5px';
-        button.style.cursor = 'pointer';
-        button.style.fontSize = '16px';
-        button.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
-        
-        button.addEventListener('click', function() {
-            if (originalGameOver && typeof originalGameOver === 'function') {
-                // 弹出gameover页面
+        endGameBtn.addEventListener('click', function() {
+            if (originalGameOver) {
                 originalGameOver.call(gameInstance);
             }
         });
         
-        document.body.appendChild(button);
+        content.appendChild(endGameBtn);
+        
+        gui.appendChild(content);
+        document.body.appendChild(gui);
+        
+        document.addEventListener('click', function(e) {
+            if (isMenuOpen && 
+                !e.target.closest('#aimware-gui') && 
+                !e.target.closest('div[style*="bottom: 20px"][style*="left: 20px"]')) {
+                closeMenu();
+            }
+        });
+    }
+    
+    function createToggleSwitch(label, defaultValue, onChange) {
+        const container = document.createElement('div');
+        container.style.display = 'flex';
+        container.style.justifyContent = 'space-between';
+        container.style.alignItems = 'center';
+        container.style.marginBottom = '18px';
+        
+        const labelEl = document.createElement('span');
+        labelEl.textContent = label;
+        labelEl.style.color = '#d0d0d0';
+        labelEl.style.fontSize = '13px';
+        labelEl.style.fontWeight = '500';
+        
+        const switchContainer = document.createElement('label');
+        switchContainer.style.position = 'relative';
+        switchContainer.style.display = 'inline-block';
+        switchContainer.style.width = '44px';
+        switchContainer.style.height = '22px';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = defaultValue;
+        checkbox.style.opacity = '0';
+        checkbox.style.width = '0';
+        checkbox.style.height = '0';
+        
+        const slider = document.createElement('span');
+        slider.style.position = 'absolute';
+        slider.style.cursor = 'pointer';
+        slider.style.top = '0';
+        slider.style.left = '0';
+        slider.style.right = '0';
+        slider.style.bottom = '0';
+        slider.style.backgroundColor = 'rgba(255,255,255,0.15)';
+        slider.style.transition = '.3s';
+        slider.style.borderRadius = '22px';
+        
+        const sliderBefore = document.createElement('span');
+        sliderBefore.style.position = 'absolute';
+        sliderBefore.style.height = '18px';
+        sliderBefore.style.width = '18px';
+        sliderBefore.style.left = '2px';
+        sliderBefore.style.bottom = '2px';
+        sliderBefore.style.backgroundColor = 'rgba(255,255,255,0.9)';
+        sliderBefore.style.transition = '.3s';
+        sliderBefore.style.borderRadius = '50%';
+        sliderBefore.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+        
+        slider.appendChild(sliderBefore);
+        switchContainer.appendChild(checkbox);
+        switchContainer.appendChild(slider);
+        
+        function updateSlider() {
+            if (checkbox.checked) {
+                slider.style.backgroundColor = 'rgba(76, 175, 80, 0.9)';
+                sliderBefore.style.transform = 'translateX(22px)';
+            } else {
+                slider.style.backgroundColor = 'rgba(255,255,255,0.15)';
+                sliderBefore.style.transform = 'translateX(0)';
+            }
+        }
+        
+        checkbox.addEventListener('change', function() {
+            updateSlider();
+            onChange(this.checked);
+        });
+        
+        updateSlider();
+        
+        container.appendChild(labelEl);
+        container.appendChild(switchContainer);
+        
+        return container;
+    }
+    
+    function createSlider(label, defaultValue, min, max, onChange) {
+        const container = document.createElement('div');
+        container.style.marginBottom = '22px';
+        
+        const labelContainer = document.createElement('div');
+        labelContainer.style.display = 'flex';
+        labelContainer.style.justifyContent = 'space-between';
+        labelContainer.style.marginBottom = '10px';
+        
+        const labelEl = document.createElement('span');
+        labelEl.textContent = label;
+        labelEl.style.color = '#d0d0d0';
+        labelEl.style.fontSize = '13px';
+        labelEl.style.fontWeight = '500';
+        
+        const valueDisplay = document.createElement('span');
+        valueDisplay.textContent = defaultValue;
+        valueDisplay.style.color = 'rgba(76, 175, 80, 0.9)';
+        valueDisplay.style.fontSize = '13px';
+        valueDisplay.style.fontWeight = '600';
+        
+        labelContainer.appendChild(labelEl);
+        labelContainer.appendChild(valueDisplay);
+        
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = min;
+        slider.max = max;
+        slider.value = defaultValue;
+        slider.style.width = '100%';
+        slider.style.height = '4px';
+        slider.style.borderRadius = '2px';
+        slider.style.background = 'rgba(255,255,255,0.1)';
+        slider.style.outline = 'none';
+        slider.style.webkitAppearance = 'none';
+        slider.style.cursor = 'pointer';
+        
+        slider.style.background = `linear-gradient(to right, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.9) ${(defaultValue - min) / (max - min) * 100}%, rgba(255,255,255,0.1) ${(defaultValue - min) / (max - min) * 100}%, rgba(255,255,255,0.1) 100%)`;
+        
+        slider.addEventListener('input', function() {
+            const value = parseInt(this.value);
+            valueDisplay.textContent = value;
+            this.style.background = `linear-gradient(to right, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.9) ${(value - min) / (max - min) * 100}%, rgba(255,255,255,0.1) ${(value - min) / (max - min) * 100}%, rgba(255,255,255,0.1) 100%)`;
+            onChange(value);
+        });
+        
+        container.appendChild(labelContainer);
+        container.appendChild(slider);
+        
+        return container;
+    }
+    
+    function createScoreInput() {
+        const container = document.createElement('div');
+        container.style.marginBottom = '18px';
+        
+        const label = document.createElement('div');
+        label.textContent = 'Set Score';
+        label.style.color = '#d0d0d0';
+        label.style.fontSize = '13px';
+        label.style.marginBottom = '10px';
+        label.style.fontWeight = '500';
+        
+        const inputContainer = document.createElement('div');
+        inputContainer.style.display = 'flex';
+        
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.placeholder = 'Enter score';
+        input.style.flex = '1';
+        input.style.padding = '10px 12px';
+        input.style.border = '1px solid rgba(255,255,255,0.08)';
+        input.style.borderRadius = '4px 0 0 4px';
+        input.style.backgroundColor = 'rgba(15, 15, 15, 0.7)';
+        input.style.color = '#e0e0e0';
+        input.style.outline = 'none';
+        input.style.fontSize = '13px';
+        
+        const button = document.createElement('button');
+        button.textContent = 'Set';
+        button.style.padding = '10px 16px';
+        button.style.backgroundColor = 'rgba(33, 150, 243, 0.9)';
+        button.style.color = 'white';
+        button.style.border = 'none';
+        button.style.borderRadius = '0 4px 4px 0';
+        button.style.cursor = 'pointer';
+        button.style.fontWeight = '600';
+        button.style.fontSize = '13px';
+        button.style.transition = 'all 0.2s ease';
+        
+        button.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(25, 118, 210, 0.95)';
+        });
+        
+        button.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = 'rgba(33, 150, 243, 0.9)';
+        });
+        
+        button.addEventListener('click', function() {
+            const score = parseInt(input.value);
+            if (!isNaN(score) && gameInstance) {
+                gameInstance.distanceRan = score;
+                if (gameInstance.updateScoreDisplay) {
+                    gameInstance.updateScoreDisplay();
+                }
+                const scoreElement = document.getElementById('score');
+                if (scoreElement) {
+                    scoreElement.textContent = Math.floor(score).toString();
+                }
+                input.value = '';
+            }
+        });
+        
+        inputContainer.appendChild(input);
+        inputContainer.appendChild(button);
+        
+        container.appendChild(label);
+        container.appendChild(inputContainer);
+        
+        return container;
+    }
+    
+    function toggleMenu() {
+        const gui = document.getElementById('aimware-gui');
+        if (isMenuOpen) {
+            closeMenu();
+        } else {
+            openMenu();
+        }
+    }
+    
+    function openMenu() {
+        const gui = document.getElementById('aimware-gui');
+        gui.style.display = 'block';
+        isMenuOpen = true;
+    }
+    
+    function closeMenu() {
+        const gui = document.getElementById('aimware-gui');
+        gui.style.display = 'none';
+        isMenuOpen = false;
     }
 })();
